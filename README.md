@@ -56,15 +56,17 @@ Open your browser at: [http://localhost:8501](http://localhost:8501)
 
 ## 📂 Project Structure
 
+```text
 app/
- ├── file_processor.py   # File parsing & chunking
- ├── vectorstore.py      # FAISS wrapper
- ├── rag_pipeline.py     # Retrieval + generation pipeline + cache
- ├── utils.py            # Helpers
-main.py                  # Streamlit UI entry point
-Dockerfile               # Docker image definition
-docker-compose.yml       # Multi-container/project orchestration
-.env                     # Environment variables (user credentials)
+├── file_processor.py # File parsing & chunking
+├── vectorstore.py # FAISS wrapper
+├── rag_pipeline.py # Retrieval + generation pipeline + cache
+├── utils.py # Helpers
+main.py # Streamlit UI entry point
+Dockerfile # Docker image definition
+docker-compose.yml # Multi-container/project orchestration
+.env # Environment variables (user credentials)
 requirements.txt
+```
 
 
