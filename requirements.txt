@@ -1,9 +1,9 @@
 streamlit
-langchain
 faiss-cpu
-PyPDF2
-python-docx
 sentence-transformers
 transformers
 torch
+PyPDF2
+python-docx
 langdetect
+rank_bm25

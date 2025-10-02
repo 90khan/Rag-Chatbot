@@ -1,0 +1,36 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Virtual environments
+venv/
+.venv/
+*.env
+
+# Git
+.git/
+.gitignore
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Data folder (mounted as volume, not included in image)
+data/
+
+# Database / cache
+*.db
+*.sqlite3
+
+# Documentation
+README.txt
+*.md
+
+# Temporary files
+*.tmp
+*.swp
+*.DS_Store
+

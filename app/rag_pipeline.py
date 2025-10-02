@@ -1,7 +1,8 @@
 import torch
-from transformers import pipeline
-import shelve
-import hashlib
+from transformers import pipeline, AutoTokenizer
+from rank_bm25 import BM25Okapi
+from sentence_transformers import CrossEncoder
+import shelve, hashlib, os
 
 class ShelveCache:
     def __init__(self, filename="cache.db"):
@@ -10,71 +11,140 @@ class ShelveCache:
     def _hash_key(self, key):
         return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
-    def get(self, key):
-        hashed_key = self._hash_key(key)
+    def get(self, key_dict):
+        raw_key = str(key_dict)
+        hashed_key = self._hash_key(raw_key)
         with shelve.open(self.filename) as db:
             return db.get(hashed_key)
 
-    def set(self, key, value):
-        hashed_key = self._hash_key(key)
+    def set(self, key_dict, value):
+        raw_key = str(key_dict)
+        hashed_key = self._hash_key(raw_key)
         with shelve.open(self.filename) as db:
             db[hashed_key] = value
 
 class RAGPipeline:
-    def __init__(self, vectorstore, cache_enabled=True):
-        self.vectorstore = vectorstore
+    def __init__(self, user_vectorstore, db_vectorstore=None, cache_enabled=True, use_bm25=False,
+                 reranker_model=None, chunk_size=400, max_model_tokens=512):
+        self.user_vectorstore = user_vectorstore
+        self.db_vectorstore = db_vectorstore
         self.cache = ShelveCache()
         self.cache_enabled = cache_enabled
+        self.use_bm25 = use_bm25
+        self.chunk_size = chunk_size
+        self.max_model_tokens = max_model_tokens
 
-        # MPS (Apple Silicon) check
+        self.bm25_user = None
+        self.bm25_db = None
+        if use_bm25:
+            self.refresh_bm25()
+
+        self.reranker = CrossEncoder(reranker_model, device="cpu") if reranker_model else None
+
         self.device = "mps" if torch.backends.mps.is_available() else "cpu"
+        device_id = 0 if self.device == "mps" else -1
+        self.generator = pipeline("text2text-generation",
+                                  model="google/flan-t5-base",
+                                  device=device_id)
+        self.tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base")
 
-        # Multilanguage model answering
-        self.generator = pipeline(
-            "text2text-generation",
-            model="google/flan-t5-base",
-            device=0 if self.device == "mps" else -1
-        )
+    def refresh_bm25(self):
+        if self.user_vectorstore and self.user_vectorstore.texts:
+            self.bm25_user = BM25Okapi([doc["text"].split() for doc in self.user_vectorstore.texts])
+        if self.db_vectorstore and self.db_vectorstore.texts:
+            self.bm25_db = BM25Okapi([doc["text"].split() for doc in self.db_vectorstore.texts])
 
     def build_prompt(self, context, query):
-        """Prompt sabit olarak İngilizce"""
-        return f"""Answer the question based on the following context. 
-Provide a concise, accurate answer. 
-Do not repeat the question. Do not just repeat words from the context; paraphrase and summarize when possible. 
-If the answer is not in the context, say 'Information not found in the provided documents.'
+        return f"""Answer the question using only the following context.
+                If the answer is not in the context, say "No such as information".
 
-Context:
-{context}
+                Context:
+                {context}
 
-Question:
-{query}
+                Question: {query}
+                Answer:"""
 
-Answer:"""
+    def retrieve(self, query, top_k, sources):
+        docs = []
+        if "user" in sources and self.user_vectorstore:
+            if self.use_bm25 and self.bm25_user:
+                scores = self.bm25_user.get_scores(query.split())
+                indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
+                docs += [self.user_vectorstore.texts[i] for i in indices]
+            else:
+                docs += self.user_vectorstore.search(query, top_k)
+        if "db" in sources and self.db_vectorstore:
+            if self.use_bm25 and self.bm25_db:
+                scores = self.bm25_db.get_scores(query.split())
+                indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
+                docs += [self.db_vectorstore.texts[i] for i in indices]
+            else:
+                docs += self.db_vectorstore.search(query, top_k)
+        return docs
 
-    def answer(self, query, top_k=3, max_length=200, temperature=0.7, do_sample=True):
+    def rerank_docs(self, query, docs, top_k):
+        if not self.reranker or not docs:
+            return docs[:top_k]
+        pairs = [(query, doc["text"]) for doc in docs]
+        scores = self.reranker.predict(pairs)
+        sorted_docs = [doc for _, doc in sorted(zip(scores, docs), reverse=True)]
+        return sorted_docs[:top_k]
+
+    def safe_chunk(self, text):
+        tokens = self.tokenizer.encode(text, truncation=False)
+        chunks = []
+        for i in range(0, len(tokens), self.max_model_tokens):
+            chunk_text = self.tokenizer.decode(tokens[i:i+self.max_model_tokens], skip_special_tokens=True)
+            chunks.append(chunk_text)
+        return chunks
+
+    def answer(self, query, top_k=3, max_length=200, temperature=0.0, do_sample=False,
+               sources=["user","db"], concat_chunks=True):
+        doc_ids = [d["meta"].get("doc_name","") for d in (self.user_vectorstore.texts if self.user_vectorstore else [])]
+        doc_hash = hashlib.sha256("".join(doc_ids).encode()).hexdigest()
+
+        cache_key = {"query": query, "sources": sources, "top_k": top_k, "max_length": max_length,
+                     "temperature": temperature, "do_sample": do_sample, "doc_hash": doc_hash}
+
         if self.cache_enabled:
-            cached = self.cache.get(query)
+            cached = self.cache.get(cache_key)
             if cached:
                 return cached
 
-        # Retrieve top_k documents
-        retrieved_docs = self.vectorstore.search(query, top_k=top_k)
-        context = "\n".join(retrieved_docs)
+        retrieved_docs = self.retrieve(query, top_k, sources)
+        retrieved_docs = self.rerank_docs(query, retrieved_docs, max(1, top_k))
 
-        # Build prompt
-        prompt = self.build_prompt(context, query)
+        if not retrieved_docs:
+            return "No such as information"
 
-        # Generate
-        output = self.generator(
-            prompt,
-            max_length=max_length,
-            temperature=temperature,
-            do_sample=do_sample
-        )
-        answer_text = output[0]["generated_text"]
+        all_chunks = []
+        for doc in retrieved_docs:
+            all_chunks.extend(self.safe_chunk(doc["text"]))
 
-        # Cache
+        if concat_chunks:
+            context = "\n\n".join(
+                [f"[{doc['meta'].get('doc_name','unknown')}] {doc['text']}" for doc in retrieved_docs[:3]]
+            )
+            prompt = self.build_prompt(context, query)
+            output = self.generator(prompt, max_new_tokens=max_length)
+            combined = output[0].get("generated_text","").strip()
+        else:
+            combined = ""
+            for doc in retrieved_docs[:3]:
+                context = f"[{doc['meta'].get('doc_name','unknown')}] {doc['text']}"
+                prompt = self.build_prompt(context, query)
+                output = self.generator(prompt, max_new_tokens=max_length)
+                combined += output[0].get("generated_text","").strip() + " "
+
         if self.cache_enabled:
-            self.cache.set(query, answer_text)
+            self.cache.set(cache_key, combined)
 
-        return answer_text
+        return combined
+
+    def clear_cache(self):
+        if os.path.exists(self.cache.filename):
+            try:
+                os.remove(self.cache.filename)
+                print(f"[Cache] {self.cache.filename} deleted.")
+            except Exception as e:
+                print(f"[Cache] Could not clear cache: {e}")
