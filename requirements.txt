@@ -7,3 +7,6 @@ PyPDF2
 python-docx
 langdetect
 rank_bm25
+spacy
+networkx
+

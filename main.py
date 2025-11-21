@@ -1,12 +1,20 @@
 import os
 import shutil
 import streamlit as st
+
 from app.file_processor import process_file
 from app.vectorstore import VectorStore
 from app.rag_pipeline import RAGPipeline
+from app.graph_pipeline import GraphRAGPipeline
 
-st.set_page_config(page_title="RAG QA Chatbot", page_icon="🤖")
+# ------------------------
+# Streamlit Config
+# ------------------------
+st.set_page_config(page_title="RAG + GraphRAG Chatbot", page_icon="🤖")
 
+# ------------------------
+# Login Check
+# ------------------------
 def check_credentials(username, password):
     env_user = os.getenv("APP_USER", "admin")
     env_pass = os.getenv("APP_PASS", "password")
@@ -22,25 +30,34 @@ if not st.session_state.authenticated:
     if st.button("Login"):
         if check_credentials(username, password):
             st.session_state.authenticated = True
-            st.success("Logged in!")
+            st.success("✅ Logged in!")
         else:
             st.error("❌ Invalid credentials")
     st.stop()
 
-st.title("📚 RAG QA Chatbot")
+# ------------------------
+# Title
+# ------------------------
+st.title("📚 RAG + 🧠 GraphRAG Chatbot")
 
-# --- VectorStores ---
+# ------------------------
+# Vector Stores
+# ------------------------
 if "user_vectorstore" not in st.session_state:
     st.session_state.user_vectorstore = VectorStore(
         persist_path="data/user_store", load=True
     )
+
 if "db_vectorstore" not in st.session_state:
     st.session_state.db_vectorstore = VectorStore(
         persist_path="data/db_store", load=True
     )
 
-# --- Sidebar Settings ---
+# ------------------------
+# Sidebar Settings
+# ------------------------
 st.sidebar.header("⚙️ Settings")
+
 top_k = st.sidebar.slider("Number of docs to retrieve", 1, 50, 3)
 max_tokens = st.sidebar.slider("Max tokens", 50, 500, 200, 10)
 
@@ -56,7 +73,9 @@ if "Database" in sources:
 use_bm25 = st.sidebar.checkbox("Use BM25", value=False)
 use_reranker = st.sidebar.checkbox("Use Reranker (MiniLM-6)", value=False)
 
-# --- RAG Pipeline init/update ---
+# ------------------------
+# RAG Pipeline
+# ------------------------
 if "rag" not in st.session_state:
     st.session_state.rag = RAGPipeline(
         user_vectorstore=st.session_state.user_vectorstore,
@@ -76,12 +95,29 @@ else:
     elif not use_reranker:
         st.session_state.rag.reranker = None
 
-# --- File uploader session_state ---
+# ------------------------
+# GraphRAG Pipeline
+# ------------------------
+if "graph_rag" not in st.session_state:
+    st.session_state.graph_rag = GraphRAGPipeline(st.session_state.rag)
+
+st.sidebar.subheader("🧠 GraphRAG Options")
+enable_graph_rag = st.sidebar.checkbox("Enable Knowledge Graph (GraphRAG)", value=False)
+
+if enable_graph_rag:
+    if st.sidebar.button("Build Knowledge Graph"):
+        with st.spinner("🔄 Building Knowledge Graph..."):
+            st.session_state.graph_rag.build_knowledge_graph()
+        st.sidebar.success("✅ Knowledge Graph built!")
+
+# ------------------------
+# File Upload Section
+# ------------------------
 if "uploaded_files" not in st.session_state:
     st.session_state.uploaded_files = []
 
 uploaded_files = st.file_uploader(
-    "Upload PDFs or DOCs",
+    "📂 Upload PDFs or DOCX files",
     type=["pdf", "docx"],
     accept_multiple_files=True,
     key="file_uploader_widget",
@@ -96,10 +132,13 @@ if uploaded_files:
             rag_pipeline=st.session_state.rag,
             persist=True,
         )
-    st.success("✅ Files uploaded and processed!")
+    st.success("✅ Files uploaded and processed successfully!")
 
-# --- Document Management ---
+# ------------------------
+# Document Management
+# ------------------------
 st.sidebar.subheader("🗑️ Document Management")
+
 if st.sidebar.button("Clear Uploaded Documents"):
     st.session_state.user_vectorstore = VectorStore(
         persist_path="data/user_store", load=False
@@ -108,22 +147,35 @@ if st.sidebar.button("Clear Uploaded Documents"):
     if os.path.exists("data/user_store"):
         shutil.rmtree("data/user_store")
     os.makedirs("data/user_store", exist_ok=True)
-    # File uploader sıfırlama
     st.session_state.uploaded_files = []
     st.success("✅ All uploaded documents cleared!")
 
-# --- Cache Management ---
+# ------------------------
+# Cache Management
+# ------------------------
 if st.sidebar.button("Clear Cache"):
     st.session_state.rag.clear_cache()
     st.sidebar.success("✅ Cache cleared!")
 
-# --- QA Input ---
-user_input = st.text_input("Ask a question:")
+# ------------------------
+# QA Section
+# ------------------------
+st.subheader("💬 Ask a Question")
+
+user_input = st.text_input("Type your question here:")
+
 if user_input:
-    response = st.session_state.rag.answer(
-        user_input,
-        top_k=top_k,
-        max_length=max_tokens,
-        sources=pipeline_sources,
-    )
-    st.write("🤖", response)
+    with st.spinner("🤖 Generating answer..."):
+        if enable_graph_rag:
+            response = st.session_state.graph_rag.query(
+                user_input, top_k=top_k, max_length=max_tokens
+            )
+        else:
+            response = st.session_state.rag.answer(
+                user_input,
+                top_k=top_k,
+                max_length=max_tokens,
+                sources=pipeline_sources,
+            )
+    st.write("🤖 **Answer:**")
+    st.write(response)
