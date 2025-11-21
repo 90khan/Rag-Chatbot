@@ -1,7 +1,7 @@
-# 📚 RAG + GraphRAG QA Chatbot
+# 📚 RAG + GraphRAG + HyDE QA Chatbot
 
-This project is a **Retrieval-Augmented Generation (RAG)** based **Question-Answering Chatbot** with a Streamlit web interface, now enhanced with **GraphRAG** — a knowledge graph feature for context-aware reasoning.  
-Users can upload **PDF** or **DOCX** files; the app extracts text, stores embeddings in **FAISS**, builds a knowledge graph, and generates answers using a **Hugging Face** model augmented with retrieved context.
+This project is a **Retrieval-Augmented Generation (RAG)** based **Question-Answering Chatbot** with a **Streamlit** interface, now enhanced with **GraphRAG** and **HyDE (Hypothetical Document Embeddings)**.  
+Users can upload **PDF** or **DOCX** files; the app extracts text, stores embeddings in **FAISS**, builds a knowledge graph, and generates **context-aware answers** using a **Hugging Face** model augmented with HyDE.
 
 ---
 
@@ -11,10 +11,11 @@ Users can upload **PDF** or **DOCX** files; the app extracts text, stores embedd
 * 🧩 **Text Processing:** Cleaning + chunking  
 * 🔎 **Search Engine:** FAISS + optional BM25 hybrid retrieval  
 * 🤖 **RAG Pipeline:** Hugging Face *Flan-T5* for context-aware answers  
-* 🧠 **GraphRAG Pipeline:** Knowledge graph built from uploaded documents to enhance reasoning and retrieval  
-* 🔁 **Cache:** Disk-based caching (`shelve`) for repeated queries  
+* 🧠 **GraphRAG Pipeline:** Knowledge graph construction and reasoning from uploaded documents  
+* 💭 **HyDE Support:** Generates hypothetical documents to improve answers in low-data scenarios  
+* 🔁 **Cache:** Disk-based caching (`shelve`) for faster repeated queries  
 * 🏷️ **Metadata:** Responses include document names for traceability  
-* 🔑 **Authentication:** Simple username/password login (environment variables)  
+* 🔑 **Authentication:** Simple username/password login via environment variables  
 * 🐳 **Dockerized:** Easy to build and deploy  
 
 ---
@@ -46,7 +47,7 @@ Username: admin
 Password: password
 ```
 
-> Change credentials by setting environment variables:
+> To override credentials, set environment variables:
 
 ```bash
 export APP_USER=your_username
@@ -57,7 +58,7 @@ Open your browser at: [http://localhost:8501](http://localhost:8501)
 
 ---
 
-## 🐳 Run with Docker
+## 🐳 Running with Docker
 
 ### Build and start containers
 
@@ -84,10 +85,11 @@ app/
 ├── rag_pipeline.py        # Retrieval + generation pipeline + cache
 ├── graph_builder.py       # Extract entities & relations from text
 ├── graph_pipeline.py      # GraphRAG: integrate knowledge graph with RAG pipeline
+├── hyde_pipeline.py       # HyDE: generate hypothetical documents for better answers
 ├── utils.py               # Helper functions
 main.py                    # Streamlit UI entry point
 Dockerfile                 # Docker image definition
-docker-compose.yml         # Multi-container/project orchestration
+docker-compose.yml         # Multi-container orchestration
 .env                       # Environment variables (user credentials)
 requirements.txt           # Python dependencies
 ```
@@ -110,8 +112,8 @@ requirements.txt           # Python dependencies
 * Streamlit
 * FAISS
 * Hugging Face Transformers
-* spaCy (for entity extraction)
-* NetworkX (for graph building and querying)
+* spaCy (entity extraction)
+* NetworkX (graph building & querying)
 * Docker / Docker Compose
 
 ---
@@ -123,17 +125,25 @@ requirements.txt           # Python dependencies
 3. The chatbot retrieves relevant context:
 
    * **RAG:** via vector embeddings (FAISS + optional BM25)
-   * **GraphRAG:** optionally uses the knowledge graph to find related entities and improve answers
-4. The app generates context-aware answers using Hugging Face *Flan-T5*.
+   * **GraphRAG:** leverages related entities for complex reasoning
+   * **HyDE:** generates hypothetical documents to fill gaps when explicit answers are missing
+4. The app produces context-aware answers using Hugging Face *Flan-T5*.
 
 ---
 
 ## 🧠 GraphRAG Usage
 
-* Enable the **Knowledge Graph** in the sidebar.
+* Enable **Knowledge Graph** in the sidebar.
 * Click **Build Knowledge Graph** to extract entities and relations from uploaded documents.
-* GraphRAG allows queries to consider related entities, not just direct vector search.
-* This improves retrieval for complex questions and reasoning over multiple documents.
+* GraphRAG improves retrieval for multi-step reasoning and complex queries.
+
+---
+
+## 💡 HyDE Usage
+
+* Integrated into the RAG pipeline.
+* Generates hypothetical documents based on the query to improve answer quality.
+* Especially useful for low-data or incomplete document scenarios, providing a seamless contextual response.
 
 ---
 
