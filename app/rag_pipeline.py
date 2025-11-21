@@ -56,13 +56,13 @@ class RAGPipeline:
 
     def build_prompt(self, context, query):
         return f"""Answer the question using only the following context.
-                If the answer is not in the context, say "No such as information".
+If the answer is not in the context, say "No such as information".
 
-                Context:
-                {context}
+Context:
+{context}
 
-                Question: {query}
-                Answer:"""
+Question: {query}
+Answer:"""
 
     def retrieve(self, query, top_k, sources):
         docs = []
@@ -140,6 +140,51 @@ class RAGPipeline:
             self.cache.set(cache_key, combined)
 
         return combined
+
+    def hyde_answer(self, query, top_k=3, max_length=200, temperature=0.0, do_sample=False,
+                    sources=["user","db"], pseudo_max_tokens=50):
+        """
+        HyDE approach:
+        1. Generate hypothetical answer
+        2. Embed hypothetical answer to retrieve relevant documents
+        3. Generate final answer using retrieved docs
+
+        Parameters:
+            pseudo_max_tokens: Max tokens to generate the pseudo-answer
+            top_k: Number of documents to retrieve using pseudo-answer
+        """
+        # Step 1: Generate hypothetical answer
+        hypo_prompt = f"Generate a concise answer for the question, without external context:\nQuestion: {query}\nAnswer:"
+        hypo_output = self.generator(hypo_prompt, max_new_tokens=pseudo_max_tokens)
+        pseudo_answer = hypo_output[0].get("generated_text","").strip()
+
+        # Step 2: Retrieve documents using pseudo-answer
+        retrieved_docs = self.retrieve(pseudo_answer, top_k, sources)
+        retrieved_docs = self.rerank_docs(pseudo_answer, retrieved_docs, max(1, top_k))
+
+        if not retrieved_docs:
+            return "No such as information"
+
+        # Step 3: Generate final answer using retrieved docs
+        context = "\n\n".join(
+            [f"[{doc['meta'].get('doc_name','unknown')}] {doc['text']}" for doc in retrieved_docs[:3]]
+        )
+        final_prompt = self.build_prompt(context, query)
+        output = self.generator(final_prompt, max_new_tokens=max_length)
+        final_answer = output[0].get("generated_text","").strip()
+
+        # Cache key
+        doc_ids = [d["meta"].get("doc_name","") for d in (self.user_vectorstore.texts if self.user_vectorstore else [])]
+        doc_hash = hashlib.sha256("".join(doc_ids).encode()).hexdigest()
+        cache_key = {"query": query, "method": "hyde", "sources": sources, "top_k": top_k,
+                     "max_length": max_length, "pseudo_max_tokens": pseudo_max_tokens,
+                     "temperature": temperature, "do_sample": do_sample,
+                     "doc_hash": doc_hash}
+
+        if self.cache_enabled:
+            self.cache.set(cache_key, final_answer)
+
+        return final_answer
 
     def clear_cache(self):
         if os.path.exists(self.cache.filename):

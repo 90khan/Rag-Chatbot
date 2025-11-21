@@ -74,6 +74,18 @@ use_bm25 = st.sidebar.checkbox("Use BM25", value=False)
 use_reranker = st.sidebar.checkbox("Use Reranker (MiniLM-6)", value=False)
 
 # ------------------------
+# HyDE Advanced Settings
+# ------------------------
+hyde_top_k = st.sidebar.slider("HyDE retrieval top_k", 1, 20, 3)
+pseudo_max_tokens = st.sidebar.slider("Pseudo-answer max tokens", 10, 200, 50)
+
+# ------------------------
+# Retrieval Method Selection
+# ------------------------
+retrieval_method = st.sidebar.radio("Select Retrieval Method", ["RAG", "HyDE"])
+compare_method = st.sidebar.checkbox("Compare RAG vs HyDE", value=False)
+
+# ------------------------
 # RAG Pipeline
 # ------------------------
 if "rag" not in st.session_state:
@@ -86,7 +98,7 @@ if "rag" not in st.session_state:
     )
 else:
     st.session_state.rag.use_bm25 = use_bm25
-    # Reranker güncelle
+    # Update reranker
     if use_reranker and not st.session_state.rag.reranker:
         from sentence_transformers import CrossEncoder
         st.session_state.rag.reranker = CrossEncoder(
@@ -167,15 +179,47 @@ user_input = st.text_input("Type your question here:")
 if user_input:
     with st.spinner("🤖 Generating answer..."):
         if enable_graph_rag:
+            # Use GraphRAG pipeline
             response = st.session_state.graph_rag.query(
                 user_input, top_k=top_k, max_length=max_tokens
             )
-        else:
-            response = st.session_state.rag.answer(
+            st.write("🤖 **GraphRAG Answer:**")
+            st.write(response)
+        elif compare_method:
+            # Compare RAG vs HyDE
+            rag_response = st.session_state.rag.answer(
                 user_input,
                 top_k=top_k,
                 max_length=max_tokens,
                 sources=pipeline_sources,
             )
-    st.write("🤖 **Answer:**")
-    st.write(response)
+            hyde_response = st.session_state.rag.hyde_answer(
+                user_input,
+                top_k=hyde_top_k,
+                max_length=max_tokens,
+                sources=pipeline_sources,
+                pseudo_max_tokens=pseudo_max_tokens,
+            )
+            st.write("🤖 **RAG Answer:**")
+            st.write(rag_response)
+            st.write("🤖 **HyDE Answer:**")
+            st.write(hyde_response)
+        else:
+            # Use selected method (RAG or HyDE)
+            if retrieval_method == "RAG":
+                response = st.session_state.rag.answer(
+                    user_input,
+                    top_k=top_k,
+                    max_length=max_tokens,
+                    sources=pipeline_sources,
+                )
+            else:  # HyDE
+                response = st.session_state.rag.hyde_answer(
+                    user_input,
+                    top_k=hyde_top_k,
+                    max_length=max_tokens,
+                    sources=pipeline_sources,
+                    pseudo_max_tokens=pseudo_max_tokens,
+                )
+            st.write("🤖 **Answer:**")
+            st.write(response)
