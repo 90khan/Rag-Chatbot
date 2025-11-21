@@ -1,143 +1,142 @@
-# 📚 RAG QA Chatbot
+📚 RAG + GraphRAG QA Chatbot
 
-This project is a **Retrieval-Augmented Generation (RAG)** based **Question-Answering Chatbot** with a Streamlit web interface.
-Users can upload **PDF** or **DOCX** files; the app extracts text, stores embeddings in **FAISS**, and generates answers using a **Hugging Face** model augmented with retrieved context.
+This project is a Retrieval-Augmented Generation (RAG) based Question-Answering Chatbot with a Streamlit web interface, now enhanced with GraphRAG — a knowledge graph feature for context-aware reasoning.
+Users can upload PDF or DOCX files; the app extracts text, stores embeddings in FAISS, builds a knowledge graph, and generates answers using a Hugging Face model augmented with retrieved context.
 
----
+✨ Features
 
-## ✨ Features
+📂 File Upload: Upload multiple PDF/DOCX documents
 
-* 📂 **File Upload:** Upload multiple PDF/DOCX documents
-* 🧩 **Text Processing:** Cleaning + chunking
-* 🔎 **Search Engine:** FAISS + optional BM25 hybrid retrieval
-* 🤖 **RAG Pipeline:** Hugging Face *Flan-T5* for context-aware answers
-* 🔁 **Cache:** Disk-based caching (`shelve`) for repeated queries
-* 🏷️ **Metadata:** Responses include document names for traceability
-* 🔑 **Authentication:** Simple username/password login (environment variables)
-* 🐳 **Dockerized:** Easy to build and deploy
+🧩 Text Processing: Cleaning + chunking
 
----
+🔎 Search Engine: FAISS + optional BM25 hybrid retrieval
 
-## 🚀 Quick Start (Local)
+🤖 RAG Pipeline: Hugging Face Flan-T5 for context-aware answers
 
-### 1️⃣ Create a virtual environment
+🧠 GraphRAG Pipeline: Knowledge graph built from uploaded documents to enhance reasoning and retrieval
 
-```bash
+🔁 Cache: Disk-based caching (shelve) for repeated queries
+
+🏷️ Metadata: Responses include document names for traceability
+
+🔑 Authentication: Simple username/password login (environment variables)
+
+🐳 Dockerized: Easy to build and deploy
+
+🚀 Quick Start (Local)
+1️⃣ Create a virtual environment
 python3 -m venv venv
 source venv/bin/activate
-```
 
-### 2️⃣ Install dependencies
-
-```bash
+2️⃣ Install dependencies
 pip install -r requirements.txt
-```
 
-### 3️⃣ Run the Streamlit app
-
-```bash
+3️⃣ Run the Streamlit app
 streamlit run main.py
-```
 
-### 4️⃣ Default login credentials
-
-```
+4️⃣ Default login credentials
 Username: admin
 Password: password
-```
 
-> Change credentials by setting environment variables:
->
-> ```bash
-> export APP_USER=your_username
-> export APP_PASS=your_password
-> ```
 
-Open your browser at: [http://localhost:8501](http://localhost:8501)
+Change credentials by setting environment variables:
 
----
+export APP_USER=your_username
+export APP_PASS=your_password
 
-## 🐳 Run with Docker
 
-### Build and start containers
+Open your browser at: http://localhost:8501
 
-```bash
+🐳 Run with Docker
+Build and start containers
 docker-compose up -d --build
-```
 
-### Stop containers
-
-```bash
+Stop containers
 docker-compose down
-```
 
-Open your browser at: [http://localhost:8501](http://localhost:8501)
 
----
+Open your browser at: http://localhost:8501
 
-## 📂 Project Structure
-
-```text
+📂 Project Structure
 app/
 ├── file_processor.py      # File parsing & chunking
 ├── vectorstore.py         # FAISS wrapper
 ├── rag_pipeline.py        # Retrieval + generation pipeline + cache
+├── graph_builder.py       # Extract entities & relations from text
+├── graph_pipeline.py      # GraphRAG: integrate knowledge graph with RAG pipeline
 ├── utils.py               # Helper functions
 main.py                    # Streamlit UI entry point
 Dockerfile                 # Docker image definition
 docker-compose.yml         # Multi-container/project orchestration
 .env                       # Environment variables (user credentials)
 requirements.txt           # Python dependencies
-```
 
----
+⚙️ Environment Variables
+Variable	Description	Default
+APP_USER	Username for login	admin
+APP_PASS	Password for login	password
+OPENAI_API_KEY	(Optional) Key for enhanced model usage	-
+🧠 Tech Stack
 
-## ⚙️ Environment Variables
+Python 3.10+
 
-| Variable         | Description                             | Default    |
-| ---------------- | --------------------------------------- | ---------- |
-| `APP_USER`       | Username for login                      | `admin`    |
-| `APP_PASS`       | Password for login                      | `password` |
-| `OPENAI_API_KEY` | (Optional) Key for enhanced model usage | -          |
+Streamlit
 
----
+FAISS
 
-## 🧠 Tech Stack
+Hugging Face Transformers
 
-* **Python 3.10+**
-* **Streamlit**
-* **FAISS**
-* **Hugging Face Transformers**
-* **Docker / Docker Compose**
+spaCy (for entity extraction)
 
----
+NetworkX (for graph building and querying)
 
-## 🧪 Example Usage
+Docker / Docker Compose
 
-1. Upload one or more `.pdf` or `.docx` files.
-2. Ask a question about the content (e.g., *"Summarize the introduction section"*).
-3. The chatbot retrieves relevant context from your uploaded files and generates an answer.
+🧪 Example Usage
 
----
+Upload one or more .pdf or .docx files.
 
-## 🤝 Contributing
+Ask a question about the content (e.g., "Summarize the introduction section").
+
+The chatbot retrieves relevant context:
+
+RAG: via vector embeddings (FAISS + optional BM25)
+
+GraphRAG: optionally uses the knowledge graph to find related entities and improve answers
+
+The app generates context-aware answers using Hugging Face Flan-T5.
+
+🧠 GraphRAG Usage
+
+Enable the Knowledge Graph in the sidebar.
+
+Click Build Knowledge Graph to extract entities and relations from uploaded documents.
+
+GraphRAG allows queries to consider related entities, not just direct vector search.
+
+This improves retrieval for complex questions and reasoning over multiple documents.
+
+🤝 Contributing
 
 Contributions are welcome!
 Please open an issue or submit a pull request for new features or bug fixes.
 
----
+📜 License
 
-## 📜 License
+This project is licensed under the MIT License.
+See the LICENSE
+ file for details.
 
-This project is licensed under the **MIT License**.
-See the [LICENSE](./LICENSE) file for details.
-
----
-
-## 💡 Acknowledgements
+💡 Acknowledgements
 
 Special thanks to:
 
-* [Hugging Face](https://huggingface.co/)
-* [Streamlit](https://streamlit.io/)
-* [FAISS](https://github.com/facebookresearch/faiss)
+Hugging Face
+
+Streamlit
+
+FAISS
+
+spaCy
+
+NetworkX
